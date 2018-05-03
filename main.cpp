@@ -26,7 +26,7 @@ int main(int argc,char** argv) {
   
   Viewer viewer(getFilename(argc,argv),fmt);
 
-  viewer.setWindowTitle("Exercice 04 - Shading");
+  viewer.setWindowTitle("- Projet SIM -");
   viewer.show();
   
   return application.exec();

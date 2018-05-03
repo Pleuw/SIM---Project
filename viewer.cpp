@@ -84,6 +84,10 @@ void Viewer::createShaders() {
   // *** simple constant shader *** 
   _vertexFilenames.push_back("shaders/constant.vert");
   _fragmentFilenames.push_back("shaders/constant.frag");
+  //_vertexFilenames.push_back("shaders/normal.vert");
+  //_fragmentFilenames.push_back("shaders/normal.frag");
+  _vertexFilenames.push_back("shaders/noise.vert");
+  _fragmentFilenames.push_back("shaders/noise.frag");
   // ******************************
 
   // TODO: add your own shader files here 
@@ -163,6 +167,7 @@ void Viewer::mouseMoveEvent(QMouseEvent *me) {
     _light[1] = (p[1]-(float)(height()/2))/((float)(height()/2));
     _light[2] = 1.0f-std::max(fabs(_light[0]),fabs(_light[1]));
     _light = glm::normalize(_light);
+    _mode = true;
   } else {
     // camera mode
     _cam->move(p);
