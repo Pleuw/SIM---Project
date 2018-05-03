@@ -22,13 +22,12 @@
 #include <stack>
 
 #include "camera.h"
-#include "meshLoader.h"
+#include "grid.h"
 #include "shader.h"
 
 class Viewer : public QGLWidget {
  public:
-  Viewer(char *filename,
-	 const QGLFormat &format=QGLFormat::defaultFormat());
+  Viewer(const QGLFormat &format=QGLFormat::defaultFormat());
   ~Viewer();
   
  protected :
@@ -42,16 +41,32 @@ class Viewer : public QGLWidget {
  private:
   void createVAO();
   void deleteVAO();
-  void drawVAO();
-
+    
+  void createFBO();
+  void deleteFBO();
+  void initFBO();    
+  
+  
   void createShaders();
-  void enableShader(unsigned int shader=0);
+  void deleteShaders();
   void disableShader();
+  
+  void drawQuad();
+  void computeNoiseShader();
+  void computeNormalShader();
+  
+  
+  
+  
 
   QTimer        *_timer;    // timer that controls the animation
   unsigned int   _currentshader; // current shader index
+  
+  Shader *_basicShader;
+  Shader *_noiseShader;
+  Shader *_normalShader;
 
-  Mesh   *_mesh;   // the mesh
+  Grid   *_grid;      // the grid
   Camera *_cam;    // the camera
 
   glm::vec3 _light; // light direction
@@ -61,8 +76,18 @@ class Viewer : public QGLWidget {
   std::vector<std::string> _fragmentFilenames; // all fragment filenames
   std::vector<Shader *>    _shaders;           // all the shaders 
 
-  GLuint _vao;
-  GLuint _buffers[3];
+  //vao
+  GLuint _vaoTerrain;
+  GLuint _terrain[2];  
+  GLuint _quad;
+  GLuint _vaoQuad;
+  
+  //noise texture
+  GLuint _noiseHeightId;
+  GLuint _noiseNormalId;
+  //fbo
+  GLuint _fbo_normal;
+  
 };
 
 #endif // VIEWER_H

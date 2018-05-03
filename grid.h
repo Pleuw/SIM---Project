@@ -13,6 +13,9 @@ class Grid {
 
   inline float *vertices() {return &_vertices[0];}
   inline int   *faces   () {return &_faces[0];   }
+  
+  inline float height(){return 1024;}
+  inline float width(){return 1024;}
  
  private:
   unsigned int _nbVertices;
@@ -23,4 +26,3 @@ class Grid {
 };
 
 #endif //GRID_H
-

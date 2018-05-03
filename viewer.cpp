@@ -2,26 +2,20 @@
 
 #include <math.h>
 #include <iostream>
-#include "meshLoader.h"
 #include <QTime>
 
 using namespace std;
 
 
-Viewer::Viewer(char *filename,const QGLFormat &format)
+Viewer::Viewer(const QGLFormat &format)
   : QGLWidget(format),
     _timer(new QTimer(this)),
-    _currentshader(0),
     _light(glm::vec3(0,0,1)),
     _mode(false) {
 
   setlocale(LC_ALL,"C");
-
-  // load a mesh into the CPU memory
-  _mesh = new Mesh(filename);
-
-  // create a camera (automatically modify model/view matrices according to user interactions)
-  _cam  = new Camera(_mesh->radius,glm::vec3(_mesh->center[0],_mesh->center[1],_mesh->center[2]));
+  _grid = new Grid();
+  _cam = new Camera(sqrt(2),glm::vec3(0,0,0));
 
   _timer->setInterval(10);
   connect(_timer,SIGNAL(timeout()),this,SLOT(updateGL()));
@@ -29,89 +23,182 @@ Viewer::Viewer(char *filename,const QGLFormat &format)
 
 Viewer::~Viewer() {
   delete _timer;
-  delete _mesh;
+  delete _grid;
   delete _cam;
 
-  for(unsigned int i=0;i<_shaders.size();++i) {
-    delete _shaders[i];
-  }
 
+  deleteShaders();
   deleteVAO();
+  deleteFBO();
 }
 
 void Viewer::createVAO() {
-  // create some buffers inside the GPU memory
-  glGenVertexArrays(1,&_vao);
-  glGenBuffers(3,_buffers);
 
-  // activate VAO
-  glBindVertexArray(_vao);
-  
-  // store mesh positions into buffer 0 inside the GPU memory
-  glBindBuffer(GL_ARRAY_BUFFER,_buffers[0]);
-  glBufferData(GL_ARRAY_BUFFER,_mesh->nb_vertices*3*sizeof(float),_mesh->vertices,GL_STATIC_DRAW);
+  //Vertexs for create the quad
+  const GLfloat quadData[] = {-1.0f,-1.0f,0.0f, 1.0f,-1.0f,0.0f, -1.0f,1.0f,0.0f, -1.0f,1.0f,0.0f, 1.0f,-1.0f,0.0f, 1.0f,1.0f,0.0f };
+
+  // create some buffers inside the GPU memory
+  glGenBuffers(2,_terrain);
+  glGenBuffers(1,&_quad);
+  glGenVertexArrays(1,&_vaoTerrain);
+  glGenVertexArrays(1,&_vaoQuad);
+
+
+  // create the VBO associated with the grid (the terrain)  glBindVertexArray(_vaoTerrain);
+  glBindBuffer(GL_ARRAY_BUFFER,_terrain[0]); // vertices
+  glBufferData(GL_ARRAY_BUFFER,_grid->nbVertices()*3*sizeof(float),_grid->vertices(),GL_STATIC_DRAW);
   glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,0,(void *)0);
   glEnableVertexAttribArray(0);
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,_terrain[1]); // indices
+  glBufferData(GL_ELEMENT_ARRAY_BUFFER,_grid->nbFaces()*3*sizeof(int),_grid->faces(),GL_STATIC_DRAW);
 
-  // store mesh normals into buffer 1 inside the GPU memory
-  glBindBuffer(GL_ARRAY_BUFFER,_buffers[1]);
-  glBufferData(GL_ARRAY_BUFFER,_mesh->nb_vertices*3*sizeof(float),_mesh->normals,GL_STATIC_DRAW);
-  glVertexAttribPointer(1,3,GL_FLOAT,GL_TRUE,0,(void *)0);
-  glEnableVertexAttribArray(1);
-
-  // store mesh indices into buffer 2 inside the GPU memory
-  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,_buffers[2]);
-  glBufferData(GL_ELEMENT_ARRAY_BUFFER,_mesh->nb_faces*3*sizeof(unsigned int),_mesh->faces,GL_STATIC_DRAW);
-
-  glBindVertexArray(0);
+  // create the VBO associated with the screen quad
+  glBindVertexArray(_vaoQuad);
+  glBindBuffer(GL_ARRAY_BUFFER,_quad); // vertices
+  glBufferData(GL_ARRAY_BUFFER, sizeof(quadData),quadData,GL_STATIC_DRAW);
+  glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,0,(void *)0);
+  glEnableVertexAttribArray(0);
 }
 
 void Viewer::deleteVAO() {
   // delete your VAO here (function called in destructor)
-  glDeleteBuffers(3,_buffers);
-  glDeleteVertexArrays(1,&_vao);
+  glDeleteBuffers(2,_terrain);
+  glDeleteBuffers(1,&_quad);
+  glDeleteVertexArrays(1,&_vaoTerrain);
+  glDeleteVertexArrays(1,&_vaoQuad);
+
 }
 
-void Viewer::drawVAO() {
-  // activate the VAO, draw the associated triangles and desactivate the VAO
-  glBindVertexArray(_vao);
-  glDrawElements(GL_TRIANGLES,3*_mesh->nb_faces,GL_UNSIGNED_INT,(void *)0);
+void Viewer::deleteFBO() {
+  // delete all FBO Ids
+  glDeleteFramebuffers(1,&_fbo_normal);
+  glDeleteTextures(1,&_noiseHeightId);
+  glDeleteTextures(1,&_noiseNormalId);
+}
+
+void Viewer::createFBO() {
+    // Ids needed for the FBO and associated textures
+    glGenFramebuffers(1,&_fbo_normal);
+    glGenTextures(1,&_noiseHeightId);
+    glGenTextures(1,&_noiseNormalId);
+
+
+  }
+
+void Viewer::initFBO() {
+
+  glBindTexture(GL_TEXTURE_2D,_noiseHeightId);
+  glTexImage2D(GL_TEXTURE_2D, 0,GL_RGBA32F,_grid->width(),_grid->height(),0,GL_RGBA,GL_FLOAT,NULL);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+  glBindTexture(GL_TEXTURE_2D,_noiseNormalId);
+  glTexImage2D(GL_TEXTURE_2D, 0,GL_RGBA32F,_grid->width(),_grid->height(),0,GL_RGBA,GL_FLOAT,NULL);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+  glBindFramebuffer(GL_FRAMEBUFFER,_fbo_normal);
+  glBindTexture(GL_TEXTURE_2D,_noiseHeightId);
+  glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,_noiseHeightId,0);
+  glBindTexture(GL_TEXTURE_2D,_noiseNormalId);
+  glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT1,GL_TEXTURE_2D,_noiseNormalId,0);
+  glBindFramebuffer(GL_FRAMEBUFFER,0);
+
+  // test if everything is ok
+  if(glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+    cout << "Warning: FBO not complete!" << endl;
+
+  // disable FBO
+  glBindFramebuffer(GL_FRAMEBUFFER,0);
+
+}
+
+
+void Viewer::createShaders() {
+
+
+
+  // create 3 shaders
+  _basicShader = new Shader();
+  _normalShader = new Shader();
+  _noiseShader = new Shader();
+
+  _basicShader->load("shaders/constant.vert","shaders/constant.frag");
+  _normalShader->load("shaders/normal.vert","shaders/normal.frag");
+  _noiseShader->load("shaders/noise.vert","shaders/noise.frag");
+}
+
+
+void Viewer::deleteShaders() {
+  delete _basicShader; _basicShader = NULL;
+  delete _normalShader; _normalShader = NULL;
+  delete _noiseShader; _noiseShader = NULL;
+}
+
+void Viewer::drawQuad() {
+
+  // Draw the 2 triangles
+  glBindVertexArray(_vaoQuad);
+  glDrawArrays(GL_TRIANGLES,0,6);
   glBindVertexArray(0);
 }
 
-void Viewer::createShaders() {
-  
-  // *** simple constant shader *** 
-  _vertexFilenames.push_back("shaders/constant.vert");
-  _fragmentFilenames.push_back("shaders/constant.frag");
-  //_vertexFilenames.push_back("shaders/normal.vert");
-  //_fragmentFilenames.push_back("shaders/normal.frag");
-  _vertexFilenames.push_back("shaders/noise.vert");
-  _fragmentFilenames.push_back("shaders/noise.frag");
-  // ******************************
+void Viewer::computeNoiseShader() {
 
-  // TODO: add your own shader files here 
+  // clear the color and depth buffers
+  glViewport(0,0,_grid->width(),_grid->height());
+  // activate the created framebuffer object
+  glBindFramebuffer(GL_FRAMEBUFFER,_fbo_normal);
+  // draw in _noiseHeightId
+  GLenum buffer_height [] = {GL_COLOR_ATTACHMENT0};
+  glDrawBuffers(1,buffer_height);
+  // activate the shader
+  glUseProgram(_noiseShader->id());
+  // clear buffers
+  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+  drawQuad();
+
+  // disable shader
+  glUseProgram(0);
+  // desactivate fbo
+  glBindFramebuffer(GL_FRAMEBUFFER,0);
+
+
 }
 
-void Viewer::enableShader(unsigned int shader) {
-  // current shader ID 
-  GLuint id = _shaders[shader]->id(); 
+void Viewer::computeNormalShader() {
+  glViewport(0,0,_grid->width(),_grid->height());
+  // activate the created framebuffer object
+  glBindFramebuffer(GL_FRAMEBUFFER,_fbo_normal);
+  // draw in _noiseNormalId
+  GLenum buffer_normal [] = {GL_COLOR_ATTACHMENT1};
+  glDrawBuffers(1,buffer_normal);
+  // activate the shader
+  glUseProgram(_normalShader->id());
+  // clear buffers
+  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-  // activate the current shader 
-  glUseProgram(id);
+  // send the noise to shader
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_2D,_noiseHeightId);
+  glUniform1i(glGetUniformLocation(_normalShader->id(),"heightmap"),0);
+  // draw base quad
 
-  // send the model-view matrix 
-  glUniformMatrix4fv(glGetUniformLocation(id,"mdvMat"),1,GL_FALSE,&(_cam->mdvMatrix()[0][0]));
+  drawQuad();
 
-  // send the projection matrix 
-  glUniformMatrix4fv(glGetUniformLocation(id,"projMat"),1,GL_FALSE,&(_cam->projMatrix()[0][0]));
 
-  // send the normal matrix (top-left 3x3 transpose(inverse(MDV))) 
-  glUniformMatrix3fv(glGetUniformLocation(id,"normalMat"),1,GL_FALSE,&(_cam->normalMatrix()[0][0]));
+  // disable shader
+  glUseProgram(0);
+  // desactivate fbo
+  glBindFramebuffer(GL_FRAMEBUFFER,0);
 
-  // send a light direction (defined in camera space)
-  // TODO (use the variable _light)
 }
+
 
 void Viewer::disableShader() {
   // desactivate all shaders 
@@ -119,14 +206,12 @@ void Viewer::disableShader() {
 }
 
 void Viewer::paintGL() {
-  // clear the color and depth buffers 
-  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-  // tell the GPU to use this specified shader and send custom variables (matrices and others)
-  enableShader(_currentshader);
 
-  // actually draw the scene 
-  drawVAO();
+  computeNoiseShader();
+
+  computeNormalShader();
+
 
   // tell the GPU to stop using this shader 
   disableShader();
@@ -212,10 +297,10 @@ void Viewer::keyPressEvent(QKeyEvent *ke) {
     }
   }
 
-  // space: next shader
-  if(ke->key()==Qt::Key_Space) {
-    _currentshader = (_currentshader+1)%_shaders.size();
-  }
+//  // space: next shader
+//  if(ke->key()==Qt::Key_Space) {
+//    _currentshader = (_currentshader+1)%_shaders.size();
+//  }
 
   updateGL();
 }
@@ -233,7 +318,7 @@ void Viewer::initializeGL() {
 
 
   // init OpenGL settings
-  glClearColor(0.0,0.0,0.0,1.0);
+  glClearColor(0.0,1.0,0.0,1.0);
   glEnable(GL_DEPTH_TEST);
   glPolygonMode(GL_FRONT_AND_BACK,GL_FILL);
   glViewport(0,0,width(),height());
