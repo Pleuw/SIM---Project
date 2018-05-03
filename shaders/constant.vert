@@ -1,7 +1,7 @@
 #version 330
 
 // input attributes 
-layout(location = 0) in vec3 position;
+layout(location = 0) in vec3 position;//position.y+=heighmap.dimension
 layout(location = 1) in vec3 normal;
 
 uniform mat4 mdvMat; // modelview matrix (constant for all the vertices)
