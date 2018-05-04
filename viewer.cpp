@@ -9,7 +9,7 @@ using namespace std;
 
 Viewer::Viewer(const QGLFormat &format)
   : QGLWidget(format),
-    _currentstep(1),
+    _currentstep(2),
     _timer(new QTimer(this)),
     _light(glm::vec3(0,0,1)),
     _mode(false) {
@@ -31,8 +31,10 @@ Viewer::~Viewer() {
   deleteShaders();
   deleteVAO();
   deleteFBO();
+  deleteTexture();
 }
 
+// Create a Vertex Array Object
 void Viewer::createVAO() {
 
   //Vertexs for create the quad
@@ -61,6 +63,7 @@ void Viewer::createVAO() {
   glEnableVertexAttribArray(0);
 }
 
+// Remove a Vertex Array Object
 void Viewer::deleteVAO() {
   // delete your VAO here (function called in destructor)
   glDeleteBuffers(2,_terrain);
@@ -70,21 +73,32 @@ void Viewer::deleteVAO() {
 
 }
 
+// Remote a Frame Buffer Object
 void Viewer::deleteFBO() {
   // delete all FBO Ids
   glDeleteFramebuffers(1,&_fbo_normal);
   glDeleteTextures(1,&_noiseHeightId);
   glDeleteTextures(1,&_noiseNormalId);
+  glDeleteFramebuffers(1,&_fbo_renderer);
+  glDeleteTextures(1,&_rendColorId);
+  glDeleteTextures(1,&_rendNormalId);
+  glDeleteTextures(1,&_rendDepthId);
 }
 
+// Create a Frame Buffer Object
 void Viewer::createFBO() {
     // Ids needed for the FBO and associated textures
     glGenFramebuffers(1,&_fbo_normal);
     glGenTextures(1,&_noiseHeightId);
     glGenTextures(1,&_noiseNormalId);
+    glGenFramebuffers(1,&_fbo_renderer);
+    glGenTextures(1,&_rendColorId);
+    glGenTextures(1,&_rendNormalId);
+    glGenTextures(1,&_rendDepthId);
 
   }
 
+// Initialize a Frame Buffer Object
 void Viewer::initFBO() {
 
   glBindTexture(GL_TEXTURE_2D,_noiseHeightId);
@@ -108,6 +122,39 @@ void Viewer::initFBO() {
   glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT1,GL_TEXTURE_2D,_noiseNormalId,0);
   glBindFramebuffer(GL_FRAMEBUFFER,0);
 
+  //
+
+  glBindTexture(GL_TEXTURE_2D,_rendColorId);
+  glTexImage2D(GL_TEXTURE_2D, 0,GL_RGBA32F,width(),height(),0,GL_RGBA,GL_FLOAT,NULL);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+  glBindTexture(GL_TEXTURE_2D,_rendNormalId);
+  glTexImage2D(GL_TEXTURE_2D, 0,GL_RGBA32F,width(),height(),0,GL_RGBA,GL_FLOAT,NULL);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+  glBindTexture(GL_TEXTURE_2D,_rendDepthId);
+  glTexImage2D(GL_TEXTURE_2D,0,GL_DEPTH_COMPONENT24,width(),height(),0,GL_DEPTH_COMPONENT,GL_FLOAT,NULL);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+  glBindFramebuffer(GL_FRAMEBUFFER,_fbo_renderer);
+  glBindTexture(GL_TEXTURE_2D,_rendColorId);
+  glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,_rendColorId,0);
+  glBindTexture(GL_TEXTURE_2D,_rendNormalId);
+  glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT1,GL_TEXTURE_2D,_rendNormalId,0);
+  glBindTexture(GL_TEXTURE_2D,_rendDepthId);
+  glFramebufferTexture2D(GL_FRAMEBUFFER,GL_DEPTH_ATTACHMENT,GL_TEXTURE_2D,_rendDepthId,0);
+  glBindFramebuffer(GL_FRAMEBUFFER,0);
+
+
   // test if everything is ok
   if(glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
     cout << "Warning: FBO not complete!" << endl;
@@ -117,7 +164,34 @@ void Viewer::initFBO() {
 
 }
 
+// Delete a texture
+void Viewer::deleteTexture(){
+  glDeleteTextures(1,&_textHerbe);
+  glDeleteTextures(1,&_textFalaise);
+}
 
+// Create textures
+void Viewer::createTexture(){
+  glGenTextures(1,&_textFalaise);
+  QImage img1 = QGLWidget::convertToGLFormat(QImage("textures/textFalaise.jpg"));
+  glBindTexture(GL_TEXTURE_2D,_textFalaise);
+  glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_MIRRORED_REPEAT);
+  glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_MIRRORED_REPEAT);
+  glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,img1.width(),img1.height(),0, GL_RGBA,GL_UNSIGNED_BYTE,(const GLvoid *)img1.bits());
+
+  glGenTextures(2,&_textHerbe);
+  QImage img2 = QGLWidget::convertToGLFormat(QImage("textures/textHerbe.jpg"));
+  glBindTexture(GL_TEXTURE_2D,_textHerbe);
+  glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_MIRRORED_REPEAT);
+  glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_MIRRORED_REPEAT);
+  glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,img2.width(),img2.height(),0, GL_RGBA,GL_UNSIGNED_BYTE,(const GLvoid *)img2.bits());
+}
+
+// Create shaders
 void Viewer::createShaders() {
 
   // create 3 shaders
@@ -130,13 +204,14 @@ void Viewer::createShaders() {
   _noiseShader->load("shaders/noise.vert","shaders/noise.frag");
 }
 
-
+// Delete shaders
 void Viewer::deleteShaders() {
   delete _terrainShader; _terrainShader = NULL;
   delete _normalShader; _normalShader = NULL;
   delete _noiseShader; _noiseShader = NULL;
 }
 
+// Draw 2 triangles insine a square
 void Viewer::drawQuad() {
 
   // Draw the 2 triangles
@@ -145,6 +220,7 @@ void Viewer::drawQuad() {
   glBindVertexArray(0);
 }
 
+// Execute the noise shader
 void Viewer::computeNoiseShader() {
 
   if(_currentstep > 0){
@@ -170,9 +246,9 @@ void Viewer::computeNoiseShader() {
   // desactivate fbo
   glBindFramebuffer(GL_FRAMEBUFFER,0);
 
-
 }
 
+// Execute the normal shader
 void Viewer::computeNormalShader() {
   if (_currentstep >= 1) {
     if (_currentstep != 1) {
@@ -206,12 +282,56 @@ void Viewer::computeNormalShader() {
 
 }
 
+// Make the rendering
+void Viewer::computeRendering() {
+  if(_currentstep >= 2){
+
+      if(_currentstep > 3){
+          // activate the created framebuffer object
+          glBindFramebuffer(GL_FRAMEBUFFER,_fbo_renderer);
+          // draw in _rendColorId & _rendNormalId
+          GLenum buffer_render [] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1};
+          glDrawBuffers(2,buffer_render);
+      }
+      // activate the shader
+      glUseProgram(_terrainShader->id());
+      // clear buffers
+      glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+      glUseProgram(_terrainShader->id());
+
+      glUniformMatrix4fv(glGetUniformLocation(_terrainShader->id(),"projMat"),1,GL_FALSE,&(_cam->projMatrix()[0][0]));  // same for all matrix
+      glUniformMatrix4fv(glGetUniformLocation(_terrainShader->id(),"mdvMat"),1,GL_FALSE,&(_cam->mdvMatrix()[0][0])); // same for all matrix
+      glUniformMatrix3fv(glGetUniformLocation(_terrainShader->id(),"normalMat"),1,GL_FALSE,&(_cam->normalMatrix()[0][0]));
+      //glUniform4fv(glGetUniformLocation(idterrainShader,"matrixModel"),1,GL_FALSE,modelMatrix); // same for all matrix
+      //glUniformMatrix4fv(glGetUniformLocation(id,"mdvMat"),1,GL_FALSE,&(_cam->mdvMatrix()[0][0]));
+
+      glActiveTexture(GL_TEXTURE0);
+      glBindTexture(GL_TEXTURE_2D,_noiseHeightId);
+      glUniform1i(glGetUniformLocation(_terrainShader->id(),"perlinTex"),0);
+
+      glActiveTexture(GL_TEXTURE1);
+      glBindTexture(GL_TEXTURE_2D,_noiseNormalId);
+      glUniform1i(glGetUniformLocation(_terrainShader->id(),"normalTex"),1);
+
+
+      glBindVertexArray(_vaoTerrain);
+      glDrawElements(GL_TRIANGLES,3*_grid->nbFaces(),GL_UNSIGNED_INT,(void *)0);
+      glBindVertexArray(0);
+
+      // disable shader
+      glUseProgram(0);
+      // desactivate fbo
+      glBindFramebuffer(GL_FRAMEBUFFER,0);
+  }
+}
 
 void Viewer::disableShader() {
   // desactivate all shaders
   glUseProgram(0);
 }
 
+// Draw function
 void Viewer::paintGL() {
 
 
@@ -219,27 +339,7 @@ void Viewer::paintGL() {
 
   computeNormalShader();
 
-
-  glUseProgram(_terrainShader->id());
-
-  glUniformMatrix4fv(glGetUniformLocation(_terrainShader->id(),"projMat"),1,GL_FALSE,&(_cam->projMatrix()[0][0]));  // same for all matrix
-  glUniformMatrix4fv(glGetUniformLocation(_terrainShader->id(),"mdvMat"),1,GL_FALSE,&(_cam->mdvMatrix()[0][0])); // same for all matrix
-  glUniformMatrix3fv(glGetUniformLocation(_terrainShader->id(),"normalMat"),1,GL_FALSE,&(_cam->normalMatrix()[0][0]));
-  //glUniform4fv(glGetUniformLocation(idterrainShader,"matrixModel"),1,GL_FALSE,modelMatrix); // same for all matri
-  //glUniformMatrix4fv(glGetUniformLocation(id,"mdvMat"),1,GL_FALSE,&(_cam->mdvMatrix()[0][0]));
-
-  glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_2D,_noiseHeightId);
-  glUniform1i(glGetUniformLocation(_terrainShader->id(),"perlinTex"),0);
-
-  glActiveTexture(GL_TEXTURE1);
-  glBindTexture(GL_TEXTURE_2D,_noiseNormalId);
-  glUniform1i(glGetUniformLocation(_terrainShader->id(),"normalTex"),1);
-
-
-  glBindVertexArray(_vaoTerrain);
-  glDrawElements(GL_TRIANGLES,3*_grid->nbFaces(),GL_UNSIGNED_INT,(void *)0);
-  glBindVertexArray(0);
+  computeRendering();
 
 
 
@@ -325,11 +425,12 @@ void Viewer::keyPressEvent(QKeyEvent *ke) {
   if(ke->key()==Qt::Key_R) {
     _noiseShader->load("shaders/noise.vert","shaders/noise.frag");
     _normalShader->load("shaders/normal.vert","shaders/normal.frag");
+    _terrainShader->load("shaders/constant.vert","constant.frag");
   }
 
   // space bar : switch to next step
   if(ke->key()==Qt::Key_Space) {
-    _currentstep = (_currentstep+1)%2;
+    _currentstep = (_currentstep+1)%3;
   }
 
   updateGL();
@@ -371,7 +472,7 @@ void Viewer::initializeGL() {
   // create/init FBO
   createFBO();
   initFBO();
-
+createTexture();
   // starts the timer
   _timer->start();
 }

@@ -46,18 +46,23 @@ class Viewer : public QGLWidget {
   void deleteFBO();
   void initFBO();
 
-
   void createShaders();
   void deleteShaders();
   void disableShader();
 
   void drawQuad();
+  void drawTerrain();
   void computeNoiseShader();
   void computeNormalShader();
+  void computeRendering();
 
+  void createTexture();
+  void deleteTexture();
 
-
-
+  // render texture ids
+  GLuint _rendColorId;
+  GLuint _rendNormalId;
+  GLuint _rendDepthId;
 
   QTimer        *_timer;    // timer that controls the animation
   unsigned int   _currentstep; // current shader index
@@ -89,6 +94,11 @@ class Viewer : public QGLWidget {
   GLuint idShaderTerrain;
   //fbo
   GLuint _fbo_normal;
+  GLuint _fbo_renderer;
+
+
+  GLuint _textHerbe;
+  GLuint _textFalaise;
 
 };
 
