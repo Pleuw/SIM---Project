@@ -120,8 +120,6 @@ void Viewer::initFBO() {
 
 void Viewer::createShaders() {
 
-
-
   // create 3 shaders
   _basicShader = new Shader();
   _normalShader = new Shader();
@@ -201,7 +199,7 @@ void Viewer::computeNormalShader() {
 
 
 void Viewer::disableShader() {
-  // desactivate all shaders 
+  // desactivate all shaders
   glUseProgram(0);
 }
 
