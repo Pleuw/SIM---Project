@@ -304,7 +304,6 @@ void Viewer::computeRendering() {
       glUniformMatrix4fv(glGetUniformLocation(_terrainShader->id(),"mdvMat"),1,GL_FALSE,&(_cam->mdvMatrix()[0][0])); // same for all matrix
       glUniformMatrix3fv(glGetUniformLocation(_terrainShader->id(),"normalMat"),1,GL_FALSE,&(_cam->normalMatrix()[0][0]));
       //glUniform4fv(glGetUniformLocation(idterrainShader,"matrixModel"),1,GL_FALSE,modelMatrix); // same for all matrix
-      //glUniformMatrix4fv(glGetUniformLocation(id,"mdvMat"),1,GL_FALSE,&(_cam->mdvMatrix()[0][0]));
 
       glActiveTexture(GL_TEXTURE0);
       glBindTexture(GL_TEXTURE_2D,_noiseHeightId);
