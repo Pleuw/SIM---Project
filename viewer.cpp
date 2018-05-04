@@ -9,6 +9,7 @@ using namespace std;
 
 Viewer::Viewer(const QGLFormat &format)
   : QGLWidget(format),
+    _currentstep(1),
     _timer(new QTimer(this)),
     _light(glm::vec3(0,0,1)),
     _mode(false) {
@@ -82,7 +83,6 @@ void Viewer::createFBO() {
     glGenTextures(1,&_noiseHeightId);
     glGenTextures(1,&_noiseNormalId);
 
-
   }
 
 void Viewer::initFBO() {
@@ -121,18 +121,18 @@ void Viewer::initFBO() {
 void Viewer::createShaders() {
 
   // create 3 shaders
-  _basicShader = new Shader();
+  _terrainShader = new Shader();
   _normalShader = new Shader();
   _noiseShader = new Shader();
 
-  _basicShader->load("shaders/constant.vert","shaders/constant.frag");
+  _terrainShader->load("shaders/constant.vert","shaders/constant.frag");
   _normalShader->load("shaders/normal.vert","shaders/normal.frag");
   _noiseShader->load("shaders/noise.vert","shaders/noise.frag");
 }
 
 
 void Viewer::deleteShaders() {
-  delete _basicShader; _basicShader = NULL;
+  delete _terrainShader; _terrainShader = NULL;
   delete _normalShader; _normalShader = NULL;
   delete _noiseShader; _noiseShader = NULL;
 }
@@ -147,13 +147,17 @@ void Viewer::drawQuad() {
 
 void Viewer::computeNoiseShader() {
 
-  // clear the color and depth buffers
-  glViewport(0,0,_grid->width(),_grid->height());
-  // activate the created framebuffer object
-  glBindFramebuffer(GL_FRAMEBUFFER,_fbo_normal);
-  // draw in _noiseHeightId
-  GLenum buffer_height [] = {GL_COLOR_ATTACHMENT0};
-  glDrawBuffers(1,buffer_height);
+  if(_currentstep > 0){
+    // clear the color and depth buffers
+    glViewport(0,0,_grid->width(),_grid->height());
+    // activate the created framebuffer object
+    glBindFramebuffer(GL_FRAMEBUFFER,_fbo_normal);
+    // draw in _noiseHeightId
+    GLenum buffer_height [] = {GL_COLOR_ATTACHMENT0};
+    glDrawBuffers(1,buffer_height);
+  } else {
+    glViewport(0,0,width(),height());
+  }
   // activate the shader
   glUseProgram(_noiseShader->id());
   // clear buffers
@@ -170,30 +174,35 @@ void Viewer::computeNoiseShader() {
 }
 
 void Viewer::computeNormalShader() {
-  glViewport(0,0,_grid->width(),_grid->height());
-  // activate the created framebuffer object
-  glBindFramebuffer(GL_FRAMEBUFFER,_fbo_normal);
-  // draw in _noiseNormalId
-  GLenum buffer_normal [] = {GL_COLOR_ATTACHMENT1};
-  glDrawBuffers(1,buffer_normal);
-  // activate the shader
-  glUseProgram(_normalShader->id());
-  // clear buffers
-  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+  if (_currentstep >= 1) {
+    if (_currentstep != 1) {
+      glViewport(0,0,_grid->width(),_grid->height());
+      // activate the created framebuffer object
+      glBindFramebuffer(GL_FRAMEBUFFER,_fbo_normal);
+      // draw in _noiseNormalId
+      GLenum buffer_normal [] = {GL_COLOR_ATTACHMENT1};
+      glDrawBuffers(1,buffer_normal);
+    } else {
+      glViewport(0,0,width(),height());
+    }
+    // activate the shader
+    glUseProgram(_normalShader->id());
+    // clear buffers
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-  // send the noise to shader
-  glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_2D,_noiseHeightId);
-  glUniform1i(glGetUniformLocation(_normalShader->id(),"heightmap"),0);
-  // draw base quad
+    // send the noise to shader
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D,_noiseHeightId);
+    glUniform1i(glGetUniformLocation(_normalShader->id(),"heightmap"),0);
+    // draw base quad
 
-  drawQuad();
+    drawQuad();
 
-
-  // disable shader
-  glUseProgram(0);
-  // desactivate fbo
-  glBindFramebuffer(GL_FRAMEBUFFER,0);
+    // disable shader
+    glUseProgram(0);
+    // desactivate fbo
+    glBindFramebuffer(GL_FRAMEBUFFER,0);
+  }
 
 }
 
@@ -211,8 +220,32 @@ void Viewer::paintGL() {
   computeNormalShader();
 
 
-  // tell the GPU to stop using this shader 
+  glUseProgram(_terrainShader->id());
+
+  glUniformMatrix4fv(glGetUniformLocation(_terrainShader->id(),"projMat"),1,GL_FALSE,&(_cam->projMatrix()[0][0]));  // same for all matrix
+  glUniformMatrix4fv(glGetUniformLocation(_terrainShader->id(),"mdvMat"),1,GL_FALSE,&(_cam->mdvMatrix()[0][0])); // same for all matrix
+  glUniformMatrix3fv(glGetUniformLocation(_terrainShader->id(),"normalMat"),1,GL_FALSE,&(_cam->normalMatrix()[0][0]));
+  //glUniform4fv(glGetUniformLocation(idterrainShader,"matrixModel"),1,GL_FALSE,modelMatrix); // same for all matri
+  //glUniformMatrix4fv(glGetUniformLocation(id,"mdvMat"),1,GL_FALSE,&(_cam->mdvMatrix()[0][0]));
+
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_2D,_noiseHeightId);
+  glUniform1i(glGetUniformLocation(_terrainShader->id(),"perlinTex"),0);
+
+  glActiveTexture(GL_TEXTURE1);
+  glBindTexture(GL_TEXTURE_2D,_noiseNormalId);
+  glUniform1i(glGetUniformLocation(_terrainShader->id(),"normalTex"),1);
+
+
+  glBindVertexArray(_vaoTerrain);
+  glDrawElements(GL_TRIANGLES,3*_grid->nbFaces(),GL_UNSIGNED_INT,(void *)0);
+  glBindVertexArray(0);
+
+
+
+  // tell the GPU to stop using this shader
   disableShader();
+
 }
 
 void Viewer::resizeGL(int width,int height) {
@@ -236,14 +269,14 @@ void Viewer::mousePressEvent(QMouseEvent *me) {
     _light[2] = 1.0f-std::max(fabs(_light[0]),fabs(_light[1]));
     _light = glm::normalize(_light);
     _mode = true;
-  } 
+  }
 
   updateGL();
 }
 
 void Viewer::mouseMoveEvent(QMouseEvent *me) {
   const glm::vec2 p((float)me->x(),(float)(height()-me->y()));
- 
+
   if(_mode) {
     // light mode
     _light[0] = (p[0]-(float)(width()/2))/((float)(width()/2));
@@ -260,12 +293,12 @@ void Viewer::mouseMoveEvent(QMouseEvent *me) {
 }
 
 void Viewer::keyPressEvent(QKeyEvent *ke) {
-  
+
   // key a: play/stop animation
   if(ke->key()==Qt::Key_A) {
-    if(_timer->isActive()) 
+    if(_timer->isActive())
       _timer->stop();
-    else 
+    else
       _timer->start();
   }
 
@@ -273,7 +306,7 @@ void Viewer::keyPressEvent(QKeyEvent *ke) {
   if(ke->key()==Qt::Key_I) {
     _cam->initialize(width(),height(),true);
   }
-  
+
   // key f: compute FPS
   if(ke->key()==Qt::Key_F) {
     int elapsed;
@@ -288,17 +321,16 @@ void Viewer::keyPressEvent(QKeyEvent *ke) {
     cout << "FPS : " << t*1000.0 << endl;
   }
 
-  // key r: reload shaders 
+  // key r: reload shaders
   if(ke->key()==Qt::Key_R) {
-    for(unsigned int i=0;i<_vertexFilenames.size();++i) {
-      _shaders[i]->reload(_vertexFilenames[i].c_str(),_fragmentFilenames[i].c_str());
-    }
+    _noiseShader->load("shaders/noise.vert","shaders/noise.frag");
+    _normalShader->load("shaders/normal.vert","shaders/normal.frag");
   }
 
-//  // space: next shader
-//  if(ke->key()==Qt::Key_Space) {
-//    _currentshader = (_currentshader+1)%_shaders.size();
-//  }
+  // space bar : switch to next step
+  if(ke->key()==Qt::Key_Space) {
+    _currentstep = (_currentstep+1)%2;
+  }
 
   updateGL();
 }
@@ -316,7 +348,7 @@ void Viewer::initializeGL() {
 
 
   // init OpenGL settings
-  glClearColor(0.0,1.0,0.0,1.0);
+  glClearColor(1.0,1.0,1.0,1.0);
   glEnable(GL_DEPTH_TEST);
   glPolygonMode(GL_FRONT_AND_BACK,GL_FILL);
   glViewport(0,0,width(),height());
@@ -326,17 +358,20 @@ void Viewer::initializeGL() {
 
   // load shader files
   createShaders();
-
+/*
   // init and load all shader files
   for(unsigned int i=0;i<_vertexFilenames.size();++i) {
     _shaders.push_back(new Shader());
     _shaders[i]->load(_vertexFilenames[i].c_str(),_fragmentFilenames[i].c_str());
   }
-
-  // VAO creation 
+*/
+  // VAO creation
   createVAO();
 
-  // starts the timer 
+  // create/init FBO
+  createFBO();
+  initFBO();
+
+  // starts the timer
   _timer->start();
 }
-

@@ -2,9 +2,9 @@
 #define VIEWER_H
 
 // GLEW lib: needs to be included first!!
-#include <GL/glew.h> 
+#include <GL/glew.h>
 
-// OpenGL library 
+// OpenGL library
 #include <GL/gl.h>
 
 // OpenGL Utility library
@@ -29,7 +29,7 @@ class Viewer : public QGLWidget {
  public:
   Viewer(const QGLFormat &format=QGLFormat::defaultFormat());
   ~Viewer();
-  
+
  protected :
   virtual void paintGL();
   virtual void initializeGL();
@@ -41,28 +41,28 @@ class Viewer : public QGLWidget {
  private:
   void createVAO();
   void deleteVAO();
-    
+
   void createFBO();
   void deleteFBO();
-  void initFBO();    
-  
-  
+  void initFBO();
+
+
   void createShaders();
   void deleteShaders();
   void disableShader();
-  
+
   void drawQuad();
   void computeNoiseShader();
   void computeNormalShader();
-  
-  
-  
-  
+
+
+
+
 
   QTimer        *_timer;    // timer that controls the animation
-  unsigned int   _currentshader; // current shader index
-  
-  Shader *_basicShader;
+  unsigned int   _currentstep; // current shader index
+
+  Shader *_terrainShader;
   Shader *_noiseShader;
   Shader *_normalShader;
 
@@ -71,23 +71,25 @@ class Viewer : public QGLWidget {
 
   glm::vec3 _light; // light direction
   bool      _mode;  // camera motion or light motion
-
+/*
   std::vector<std::string> _vertexFilenames;   // all vertex filenames
   std::vector<std::string> _fragmentFilenames; // all fragment filenames
-  std::vector<Shader *>    _shaders;           // all the shaders 
+  std::vector<Shader *>    _shaders;           // all the shaders
+*/
 
   //vao
   GLuint _vaoTerrain;
-  GLuint _terrain[2];  
+  GLuint _terrain[2];
   GLuint _quad;
   GLuint _vaoQuad;
-  
+
   //noise texture
   GLuint _noiseHeightId;
   GLuint _noiseNormalId;
+  GLuint idShaderTerrain;
   //fbo
   GLuint _fbo_normal;
-  
+
 };
 
 #endif // VIEWER_H
